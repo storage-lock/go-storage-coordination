@@ -3,6 +3,8 @@ package coordination
 import (
 	"context"
 	"time"
+
+	"github.com/storage-lock/go-storage"
 )
 
 // Semaphore 是基于 CAS 的计数信号量。
@@ -74,7 +76,7 @@ func (x *Semaphore) Acquire(ctx context.Context) error {
 		if err == nil || (err != nil && err != ErrNoPermit) {
 			return err
 		}
-		if err := waitSignal(ctx, 5*time.Millisecond); err != nil {
+		if err := x.ns.waitSignal(ctx, x.id); err != nil {
 			return err
 		}
 	}
@@ -134,7 +136,7 @@ func (x *Latch) Wait(ctx context.Context) error {
 		if current != nil && current.Count <= 0 {
 			return nil
 		}
-		if err := waitSignal(ctx, 5*time.Millisecond); err != nil {
+		if err := x.ns.waitSignal(ctx, x.id); err != nil {
 			return err
 		}
 	}
@@ -195,18 +197,46 @@ func (x *Condition) Wait(ctx context.Context) error {
 		if current != nil && current.Signal != seen {
 			return nil
 		}
-		if err := waitSignal(ctx, 5*time.Millisecond); err != nil {
+		if err := x.ns.waitSignal(ctx, x.id); err != nil {
 			return err
 		}
 	}
 }
 
-func waitSignal(ctx context.Context, interval time.Duration) error {
+func (x *Namespace) waitSignal(ctx context.Context, id string) error {
+	interval := x.wait
+	if interval <= 0 {
+		interval = 5 * time.Millisecond
+	}
+	watchable, ok := x.store.(storage.LockWatchable)
+	if !ok {
+		if adapter, adapted := x.store.(*StorageAdapter); adapted {
+			watchable, ok = adapter.storage.(storage.LockWatchable)
+			id = x.key(id)
+		}
+	}
+	var updates <-chan *storage.LockInformation
+	if ok {
+		ch, err := watchable.Watch(ctx, id)
+		if err == nil {
+			updates = ch
+		}
+	}
 	timer := time.NewTimer(interval)
 	defer timer.Stop()
+	if updates == nil {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+			return nil
+		}
+	}
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-updates:
+		return nil
 	case <-timer.C:
 		return nil
 	}

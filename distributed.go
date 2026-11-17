@@ -132,7 +132,7 @@ func (x *Barrier) wait(ctx context.Context) error {
 		if current != nil && current.Count <= 0 {
 			return nil
 		}
-		if err := waitSignal(ctx, 5*time.Millisecond); err != nil {
+		if err := x.ns.waitSignal(ctx, x.id); err != nil {
 			return err
 		}
 	}

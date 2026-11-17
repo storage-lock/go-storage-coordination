@@ -4,7 +4,7 @@ go 1.23
 
 require (
 	github.com/storage-lock/go-memory-storage v0.0.1
-	github.com/storage-lock/go-storage v0.0.3
+	github.com/storage-lock/go-storage v0.1.0
 	github.com/storage-lock/go-storage-lock v0.0.6
 	github.com/stretchr/testify v1.11.1
 )

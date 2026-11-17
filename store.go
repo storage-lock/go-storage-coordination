@@ -32,6 +32,8 @@ type Namespace struct {
 	name  string
 	store Store
 	clock TimeProvider
+	// wait 是没有存储通知时的兜底轮询间隔。
+	wait time.Duration
 }
 
 // SetTimeProvider 设置命名空间内限流器使用的统一时间源。
@@ -45,7 +47,16 @@ func NewNamespace(name string, store Store) (*Namespace, error) {
 	if store == nil {
 		return nil, errors.New("store can not be nil")
 	}
-	return &Namespace{name: name, store: store}, nil
+	return &Namespace{name: name, store: store, wait: 5 * time.Millisecond}, nil
+}
+
+// SetWaitInterval 设置没有存储通知时的轮询间隔。
+// 小于等于 0 时保持默认 5ms。存储实现了 Watch 时，等待会被通知提前唤醒。
+func (x *Namespace) SetWaitInterval(interval time.Duration) {
+	if interval <= 0 {
+		return
+	}
+	x.wait = interval
 }
 
 func (x *Namespace) key(id string) string { return x.name + "\x00" + id }
